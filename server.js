@@ -1,32 +1,28 @@
 const express = require("express");
 const http = require("http");
 const socketIO = require("socket.io");
-const { Users } = require("../client/src/utils/users");
 const path = require("path");
+
 const publicPath = path.join(__dirname, "../client/public");
-const { BOARD_HEIGHT, BOARD_WIDTH } = require("../client/src/config");
+const { Users } = require("../client/src/utils/users");
+const { createApple, createSnake } = require('../client/src/utils/helpers').default;
+
 let app = express();
 let server = http.createServer(app);
 const port = process.env.PORT || 3000;
 let io = socketIO(server);
-const MAX_CELLS = BOARD_WIDTH * BOARD_HEIGHT;
 let users = new Users();
-users.users = [];
-let food = Math.ceil(Math.random() * MAX_CELLS - 1);
-
+let apple = createApple();
 app.use(express.static(publicPath));
-io.on("connection", socket => {
-  console.log("New User !");
+io.sockets.on("connection", socket => {
+  console.log("New User Connected!");
   let user = {
     id: socket.id,
-    head: null
+    snake: []
   };
   users.addUser(user);
-  socket.emit("getFood", food);
+  socket.emit("newApple", apple);
   socket.on("myPosition", user => {
-    console.log("inside my position server");
-    console.log(user.head);
-    console.log(users.users);
     for (let i = 0; i < users.users.length; i++) {
       if (users.users[i].id === user.id) {
         users.updateUser(user);
@@ -37,20 +33,26 @@ io.on("connection", socket => {
   });
 
   socket.on("dead", user => {
-    users.removeUser(user.id);
+    user.snake = [];
+    io.emit('enemyDead', user);
   });
 
-  socket.on("foodEaten", () => {
-    console.log("inside food eaten server");
-    food = Math.ceil(Math.random() * MAX_CELLS - 1);
-    io.emit("getFood", food);
+  socket.on("getApple", () => {
+    apple = createApple();
+    io.emit("newApple", apple);
+  });
+
+  socket.on("getSnake", () => {
+    const snake = createSnake();
+
+    socket.emit("newSnake", snake);
   });
 
   socket.on("disconnect", () => {
-    console.log("Got disconnect!");
-    for (i = 0; i < users.length; i++) {
-      if (users.users[i].id == socket.id) {
-        users.splice(i, 1);
+    console.log("User Disconnect!");
+    for (let i = 0; i < users.users.length; i++) {
+      if (users.users[i].id === socket.id) {
+        users.removeUser(socket.id);
         break;
       }
     }
